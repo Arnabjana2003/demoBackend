@@ -10,6 +10,7 @@ app.use(express.urlencoded({extended: true}))
 app.use(cookieParser())
 app.use(express.static('public'))
 
+app.get("/",(req,res)=>res.json({message: "ok"}))
 //routers import
 import userRouter from "./routers/user.router.js";
 import subscriptionRouter from "./routers/subscription.router.js"
