@@ -1,5 +1,5 @@
 import { Subscription } from "../models/subscription.model.js";
-import ApiError from "../utils/ApiError.js";
+import ApiError from "../utils/apiError.jspiError.js";
 import ApiResponse from "../utils/apiResponse.js";
 import asyncHandler from "../utils/asyncHandler.js";
 
