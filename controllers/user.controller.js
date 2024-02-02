@@ -226,7 +226,6 @@ const updateProfileImage = asyncHandler(async (req, res) => {
   if (!req.file) throw new ApiError(401, "file is required");
   const file = req.file;
   const { profileImageFileName } = req.userData;
-  if (!profileImageFileName) throw new ApiError(401, "file name is required");
 
   const uploaded = await uploadOnCloudinary(
     file.path,
@@ -241,7 +240,7 @@ const updateProfileImage = asyncHandler(async (req, res) => {
   });
   if (!finalResponse) throw new ApiError(500, "Error occurs at db saving");
 
-  const deleted = await deleteFromCloudinary(
+  const deleted = profileImageFileName && await deleteFromCloudinary(
     `profileImages/${profileImageFileName}`
   );
   console.log(deleted);
