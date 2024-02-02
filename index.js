@@ -1,9 +1,17 @@
-import express from "express"
+import { app } from "./app.js"
+import connectDb from "./db/index.js"
+import dotenv from 'dotenv'
 
-const app = express()
-
-app.get("/",(req,res)=>{
-    res.json({message: "ok"})
+dotenv.config({
+    path: "./.env" 
 })
 
-app.listen(8000,()=>console.log("Listening on 8000"))
+connectDb()
+.then(()=>{
+    app.listen(process.env.PORT,()=>{
+        console.log('Server is started');
+    })
+})
+.catch((err)=>{
+    console.log("DB connection err at index::",err);
+})
