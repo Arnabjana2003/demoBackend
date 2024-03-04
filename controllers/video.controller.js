@@ -18,6 +18,7 @@ const getAllVideos = asyncHandler(async (req, res) => {
         pipeline: [
           {
             $project: {
+              _id:1,
               userName: 1,
               profileImage: 1,
             },
@@ -125,14 +126,43 @@ const getSuggestedVideos = asyncHandler(async (req, res) => {
       },
     },
     {
+      $lookup:{
+        from:"users",
+        foreignField:"_id",
+        localField:"author",
+        as: "author",
+        pipeline: [
+          {
+            $project:{
+              _id:1,
+              profileImage:1,
+              userName:1
+            }
+          }
+        ]
+      }
+    },
+      {
+        $addFields: {
+          author: {
+            $first: "$author"
+          }
+        }
+    },
+    {
         $sort:{
             views: -1
         }
     },
-  ]);
+    {
+      $limit:5
+    }
+  ]
+  );
 
 
   if(suggestedVideos.length == 0) throw new ApiError(400,"suggested videos not found")
+  console.log("suggested",suggestedVideos);
   return res
 .status(200)
 .json(
