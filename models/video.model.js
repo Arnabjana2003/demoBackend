@@ -5,15 +5,23 @@ const videoSchema = new Schema({
         type: String,
         required: [true, "Title is required"]
     },
-    description: {
+    description: { 
         type: String,
         required: [true, "Description is required"],
     },
-    videoLink: {
+    videoFileName:{
+        type: String,
+        required: [true, "Video file name is required"],
+    },
+    videoUrl: {
         type: String,
         required: [true, "Video link is required"],
     },
-    thumbnailLink: {
+    thumbnailFileName:{
+        type: String,
+        required: [true, "Thumbnail file name is required"],
+    },
+    thumbnailUrl: {
         type: String,
         required: [true, "Thumbnail link is required"],
     },
@@ -31,7 +39,7 @@ const videoSchema = new Schema({
         required: true,
         default: 0
     },
-    owner: {
+    author: {
         type: Schema.Types.ObjectId,
         ref: "User",
     }

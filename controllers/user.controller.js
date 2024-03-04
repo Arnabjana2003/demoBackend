@@ -7,6 +7,7 @@ import {
 } from "../utils/cloudinary.js";
 import ApiResponse from "../utils/apiResponse.js";
 import jwt from "jsonwebtoken";
+import mongoose from "mongoose";
 
 const cookieOptions = {
   httpOnly: true,
@@ -42,22 +43,26 @@ const registerUser = asyncHandler(async (req, res) => {
     throw new ApiError(409, "User already exists");
   }
 
-  //collecting images path
+  // collecting images path
   let profileImgPath,
     coverImgPath,
     profileImageFileName,
     coverImageFileName,
     profileImgLink,
     coverImgLink;
+    
   if (req.files) {
-    const file = req.files;
+    const file = req.files
     if (file.profileImage) {
       profileImgPath = file.profileImage[0].path;
       profileImageFileName = userName + `_${Date.now()}`;
+    }
+    if (file.coverImage){
+      coverImgPath = file.coverImage[0].path;
       coverImageFileName = userName + `_${Date.now()}`;
     }
-    if (file.coverImage) coverImgPath = file.coverImage[0].path;
   }
+  // if(!profileImgPath)throw new ApiError(400,"profile image is required");
 
   // uploading images on the cloudinary
   if (profileImgPath) {
@@ -66,6 +71,7 @@ const registerUser = asyncHandler(async (req, res) => {
       "profileImages",
       profileImageFileName
     );
+    if(!profileImgLink) throw new ApiError(400,"profile image upload failed");
   }
   if (coverImgPath) {
     coverImgLink = await uploadOnCloudinary(
@@ -240,24 +246,25 @@ const updateProfileImage = asyncHandler(async (req, res) => {
   });
   if (!finalResponse) throw new ApiError(500, "Error occurs at db saving");
 
-  const deleted = profileImageFileName && await deleteFromCloudinary(
-    `profileImages/${profileImageFileName}`
-  );
+  const deleted =
+    profileImageFileName &&
+    (await deleteFromCloudinary(`profileImages/${profileImageFileName}`));
   console.log(deleted);
   return res
     .status(200)
     .json(new ApiResponse(200, "Profile image updated successfully", {}));
 });
 
-const getChannel = asyncHandler(async (req, res) => {
-  const { userName } = req.params;
-  console.log(userName);
-  if (!userName?.trim()) throw new ApiError(404, "Username not found");
+const getChannelInfo = asyncHandler(async (req, res) => {
+  const { channelId } = req.params;
+  console.log(channelId);
+  console.log(req.user?._id)
+  if (!channelId) throw new ApiError(404, "ChannelId not found");
 
   const channel = await User.aggregate([
     {
       $match: {
-        userName: userName.toLowerCase(),
+        _id: new mongoose.Types.ObjectId(channelId),
       },
     },
     {
@@ -269,17 +276,31 @@ const getChannel = asyncHandler(async (req, res) => {
       },
     },
     {
+      $lookup:{
+        from: "videos",
+        foreignField: "author",
+        localField: "_id",
+        as: "videos"
+      }
+    },
+    {
       $addFields: {
         subscribers: {
           $size: "$subscribersCount",
         },
+        videos:{
+          $size: "$videos"
+        },
         isSubscribed: {
           $cond: {
-            if: { $in: [req.userData?._id, "$subscribersCount.subscriber"] },
+            if: {
+              $in: [new mongoose.Types.ObjectId(req.user?._id), "$subscribersCount.subscriber"]
+            },
             then: true,
-            else: false,
-          },
-        },
+            else: false
+          }
+        }
+        
       },
     },
     {
@@ -291,10 +312,12 @@ const getChannel = asyncHandler(async (req, res) => {
         coverImage: 1,
         subscribers: 1,
         isSubscribed: 1,
+        subscribersCount:1,
+        videos:1,
       },
     },
   ]);
-
+console.log("channel info:",channel)
   if (channel.length == 0) throw new ApiError(404, "Channel not found");
 
   return res
@@ -308,6 +331,6 @@ export {
   refreshAccessToken,
   currentUser,
   updatePassword,
-  getChannel,
+  getChannelInfo,
   updateProfileImage,
 };

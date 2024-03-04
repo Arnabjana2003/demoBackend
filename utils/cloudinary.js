@@ -7,12 +7,12 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-const uploadOnCloudinary = async (localFilePath,folder="",userid="") => {
+const uploadOnCloudinary = async (localFilePath,folder="",filename="") => {
   try {
     if (!localFilePath) return null;
 
     const uploadResponse = await cloudinary.uploader.upload(localFilePath, {
-      public_id: `firstbackend/${folder}/${userid || Date.now()}`,
+      public_id: `firstbackend/${folder}/${filename || Date.now()}`,
       resource_type: "auto",
     });
     fs.unlinkSync(localFilePath);
