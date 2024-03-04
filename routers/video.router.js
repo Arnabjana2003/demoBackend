@@ -8,7 +8,7 @@ const router = Router()
 
 router.route("/all").get(getAllVideos);
 router.route("/:videoId").get(getCurrentUsersid,playVideo);
-router.route("/suggestedVideos/:channelId").get(getSuggestedVideos);
+router.route("/suggestedvideos/:channelId").get(getSuggestedVideos);
 router.route("/getvideos/:channelId").get(getChannelVideos)
 router.route("/uploadvideo").post(
     auth,

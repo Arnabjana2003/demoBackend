@@ -129,9 +129,6 @@ const getSuggestedVideos = asyncHandler(async (req, res) => {
             views: -1
         }
     },
-   {
-    $limit: 2
-   }
   ]);
 
 
