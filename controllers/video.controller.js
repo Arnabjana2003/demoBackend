@@ -5,7 +5,7 @@ import { User } from "../models/user.model.js";
 import ApiResponse from "../utils/apiResponse.js";
 import mongoose from "mongoose";
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
-
+import { ObjectId } from "mongoose";
 
 const getAllVideos = asyncHandler(async (req, res) => {
   const allVideos = await Video.aggregate([
@@ -18,7 +18,7 @@ const getAllVideos = asyncHandler(async (req, res) => {
         pipeline: [
           {
             $project: {
-              _id:1,
+              _id: 1,
               userName: 1,
               profileImage: 1,
             },
@@ -33,6 +33,14 @@ const getAllVideos = asyncHandler(async (req, res) => {
         },
       },
     },
+    {
+      $match:{
+        $or: [
+          {isPublished: true},
+          {isLive: true},
+        ]
+      }
+    }
   ]);
   if (!allVideos) throw new ApiError(500, "Couldn't get all videos");
   return res.status(200).json(allVideos);
@@ -90,17 +98,27 @@ const playVideo = asyncHandler(async (req, res) => {
         },
         isSubscribed: {
           $cond: {
-            if: { $in: [new mongoose.Types.ObjectId(req.user?._id), "$subscribers.subscriber"] },
+            if: {
+              $in: [
+                new mongoose.Types.ObjectId(req.user?._id),
+                "$subscribers.subscriber",
+              ],
+            },
             then: true,
             else: false,
           },
         },
         isLiked: {
           $cond: {
-            if: {$in: [new mongoose.Types.ObjectId(req.user?._id), "$likes.likedBy"]},
+            if: {
+              $in: [
+                new mongoose.Types.ObjectId(req.user?._id),
+                "$likes.likedBy",
+              ],
+            },
             then: true,
-            else: false
-          }
+            else: false,
+          },
         },
         likes: {
           $size: "$likes",
@@ -126,95 +144,247 @@ const getSuggestedVideos = asyncHandler(async (req, res) => {
       },
     },
     {
-      $lookup:{
-        from:"users",
-        foreignField:"_id",
-        localField:"author",
+      $lookup: {
+        from: "users",
+        foreignField: "_id",
+        localField: "author",
         as: "author",
         pipeline: [
           {
+            $project: {
+              _id: 1,
+              profileImage: 1,
+              userName: 1,
+            },
+          },
+        ],
+      },
+    },
+    {
+      $addFields: {
+        author: {
+          $first: "$author",
+        },
+      },
+    },
+    {
+      $match:{
+        $or: [
+          {isPublished: true},
+          {isLive: true},
+        ]
+      }
+    },
+    {
+      $sort: {
+        views: -1,
+      },
+    },
+    {
+      $limit: 5,
+    },
+  ]);
+
+  if (suggestedVideos.length == 0)
+    throw new ApiError(400, "suggested videos not found");
+  console.log("suggested", suggestedVideos);
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(
+        200,
+        "fetched top 5 suggested videos based on views",
+        suggestedVideos
+      )
+    );
+});
+
+const getChannelVideos = asyncHandler(async (req, res) => {
+  const { channelId } = req.params;
+  if (!channelId) throw new ApiError(400, "channelId is required");
+
+  const videos = await Video.find(
+    { author: channelId },
+    { title: 1, videoUrl: 1, thumbnailUrl: 1, views: 1, duration: 1 }
+  );
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, "video fetched successfully", videos));
+});
+
+const uploadVideo = asyncHandler(async (req, res) => {
+  const { userName } = req.userData;
+  const { title, description, isPublished, category } = req.body;
+  const videoFile = req.files.videoFile[0].path;
+  const thumbnail = req.files.thumbnail[0].path;
+  if (!videoFile || !thumbnail) throw new ApiError(400, "Files are required");
+
+  if (!(title && description && isPublished && category)) {
+    throw new ApiError(400, "Provide all the fields properly");
+  }
+
+  const videoFileName = `${userName}_${title}_${Date.now()}`;
+  const thumbnailFileName = `${userName}_${title}_${Date.now()}`;
+
+  const videoUrl = await uploadOnCloudinary(videoFile, "videos", videoFileName);
+  const thumbnailUrl = await uploadOnCloudinary(
+    thumbnail,
+    "thumbnails",
+    thumbnailFileName
+  );
+  if (!videoUrl || !thumbnailUrl)
+    throw new ApiError(500, "Failed to uplaod files");
+
+  const videoData = await Video.create({
+    title,
+    description,
+    isPublished,
+    category,
+    videoFileName,
+    thumbnailFileName,
+    videoUrl: videoUrl.secure_url,
+    duration: videoUrl.duration,
+    thumbnailUrl: thumbnailUrl?.secure_url,
+    author: req.userData?._id,
+  });
+  if (!videoData)
+    throw new ApiError(500, "Failed to save video in the database");
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, "Video uploded successfully", videoData));
+});
+
+const searchsuggestion = asyncHandler(async (req, res) => {
+  const { query } = req.body;
+  const searchQuery = new RegExp(query, "i");
+  const suggestions = await Video.aggregate([
+    {
+      $lookup: {
+        from: "users",
+        foreignField: "_id",
+        localField: "author",
+        as: "authorInfo",
+      },
+    },
+    {
+      $addFields: {
+        userName: {
+          $first: "$authorInfo.userName",
+        },
+        fullName: {
+          $first: "$authorInfo.fullName",
+        },
+      },
+    },
+    {
+      $match: {
+        $or: [
+          {
+            title: { $regex: searchQuery },
+          },
+          {
+            fullName: { $regex: searchQuery },
+          },
+          {
+            userName: { $regex: searchQuery },
+          },
+        ],
+      },
+    },
+    {
+      $project: {
+        title:1,
+        userName: 1,
+        fullName: 1,
+      },
+    },
+  ]);
+  return res.status(200).json(new ApiResponse(200, "", suggestions));
+});
+
+const searchedVideos = asyncHandler(async (req, res) => {
+  const query = req.query.q
+  console.log(query);
+  if(!query) throw new ApiError(400,"Query parameter is required")
+  const searchQuery = new RegExp(query,"i")
+
+  const videos = await Video.aggregate([
+    {
+      $match:{
+        $or: [
+          {isPublished: true},
+          {isLive: true},
+        ]
+      }
+    },
+    {
+      $lookup:{
+        from: "users",
+        localField:"author",
+        foreignField:"_id",
+        as:"authorInfo",
+        pipeline:[
+          {
             $project:{
               _id:1,
-              profileImage:1,
-              userName:1
+              userName:1,
+              fullName:1,
+              profileImage:1
             }
           }
         ]
       }
     },
-      {
-        $addFields: {
-          author: {
-            $first: "$author"
-          }
+    {
+      $addFields: {
+        userName: {
+          $first: "$authorInfo.userName"
+        },
+        fullName: {
+          $first: "$authorInfo.fullName"
+        },
+        author:{
+          $first: "$authorInfo"
         }
+      }
     },
     {
-        $sort:{
-            views: -1
-        }
+      $match:{
+        $or: [
+          {
+            title: { $regex: searchQuery },
+          },
+          {
+            fullName: { $regex: searchQuery },
+          },
+          {
+            userName: { $regex: searchQuery },
+          },
+        ]
+      }
     },
     {
-      $limit:5
+      $project:{
+        userName:0,
+        fullName:0,
+        authorInfo:0
+      }
     }
-  ]
-  );
-
-
-  if(suggestedVideos.length == 0) throw new ApiError(400,"suggested videos not found")
-  console.log("suggested",suggestedVideos);
+  ])
+  console.log(videos)
   return res
-.status(200)
-.json(
-    new ApiResponse(200,"fetched top 5 suggested videos based on views",suggestedVideos)
-)
+    .status(200)
+    .json(new ApiResponse(200, "videos fetched with query", videos));
 });
 
-const getChannelVideos = asyncHandler(async(req,res)=>{
-  const {channelId} = req.params
-  if(!channelId) throw new ApiError(400,"channelId is required")
-
-  const videos = await Video.find({author:channelId},{title:1,videoUrl:1,thumbnailUrl:1,views:1,duration:1})
-  
-  return res
-  .status(200)
-  .json(
-    new ApiResponse(200,"video fetched successfully",videos)
-  )
-})
-
-const uploadVideo = asyncHandler(async(req,res)=>{
-  const {userName} = req.userData
-  const {title,description,isPublished,category} = req.body
-  const videoFile = req.files.videoFile[0].path
-  const thumbnail = req.files.thumbnail[0].path
-  if(!videoFile || !thumbnail) throw new ApiError(400,"Files are required")
-
-  if(!(title && description && isPublished &&  category)){
-    throw new ApiError(400,"Provide all the fields properly")
-  }
-
-  const videoFileName = `${userName}_${title}_${Date.now()}`
-  const thumbnailFileName = `${userName}_${title}_${Date.now()}`
-
-  const videoUrl = await uploadOnCloudinary(videoFile,"videos",videoFileName)
-  const thumbnailUrl = await uploadOnCloudinary(thumbnail,"thumbnails",thumbnailFileName)
-  if(!videoUrl || !thumbnailUrl) throw new ApiError(500,"Failed to uplaod files")
-
-  const videoData = await Video.create({
-    title,description,isPublished,category,videoFileName,thumbnailFileName,
-    videoUrl: videoUrl.secure_url,
-    duration: videoUrl.duration,
-    thumbnailUrl: thumbnailUrl?.secure_url,
-    author: req.userData?._id
-  })
-  if(!videoData) throw new ApiError(500, "Failed to save video in the database")
-
-  return res
-  .status(200)
-  .json(
-    new ApiResponse(200,"Video uploded successfully",videoData)
-  )
-})
-
-export { getAllVideos, playVideo,getSuggestedVideos ,getChannelVideos,uploadVideo};
+export {
+  getAllVideos,
+  playVideo,
+  getSuggestedVideos,
+  getChannelVideos,
+  uploadVideo,
+  searchsuggestion,
+  searchedVideos,
+};
