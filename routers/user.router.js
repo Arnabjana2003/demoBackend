@@ -15,14 +15,14 @@ import getCurrentUsersid from "../middleware/getCurrentUser.js";
 const router = Router();
 
 router.route("/register").post(
-  // upload.fields([
-  //   {
-  //     name: "profileImage",
-  //   },
-  //   {
-  //     name: "coverImage",
-  //   },
-  // ]),
+  upload.fields([
+    {
+      name: "profileImage",
+    },
+    {
+      name: "coverImage",
+    },
+  ]),
   registerUser
 );
 router.route("/login").post(loginUser);
